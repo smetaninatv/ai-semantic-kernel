@@ -18,7 +18,7 @@ public static class DependencyInjection
         services.AddSingleton<IConnectionStringProvider, ConnectionStringProvider>();
 
         //Inject Repositories
-        services.AddTransient<IProductRepository<Product>, ProductRepository<Product>>();
+        services.AddTransient<IProductRepository<object>, ProductRepository<object>>();
 
         return services;
     }

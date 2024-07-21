@@ -31,33 +31,33 @@ public class ResultConverterPlugin
     [return: Description("Converts SQL result to the user friendly message.")]
     public async Task<string> ConverToUserFriendlyMessageAsync(KernelArguments arguments)
     {
-        var prompt = @"Convert provided json to friendly and polite response to the customer.
-
+        var prompt = @"The history of user request:
             {{$history}}
-            User: {{$message}}
+
+            Use provided json content and the data from it to answer the question.
+            {{$message}}
+
             ChatBot:";
 
         var renderedPrompt = await _promptTemplateFactory.Create(new PromptTemplateConfig(prompt)).RenderAsync(_kernel, arguments);
 
-        var skFunction = _kernel.CreateFunctionFromPrompt(
+        var function = _kernel.CreateFunctionFromPrompt(
             promptTemplate: renderedPrompt,
             functionName: nameof(ConverToUserFriendlyMessageAsync),
             description: "Complete the prompt.");
 
-        var resultAsString = string.Empty;
+        var result = string.Empty;
         try
         {
-            var result = await skFunction.InvokeAsync(_kernel, arguments);
-            resultAsString = result.GetValue<string>();
+            var invokeResult = await function.InvokeAsync(_kernel, arguments);
+            result = invokeResult.GetValue<string>();
         }
         catch(Exception exception)
         {
-            _logger?.LogError("ChatAsync", exception);
+            _logger?.LogError("ConverToUserFriendlyMessageAsync", exception);
         }
 
-        string history = $"{arguments["history"]}";
-        history += $"\nUser: {arguments["message"]}\nSuggestions: {resultAsString}\n";
-        return history;
+        return result;
     }
 
 }

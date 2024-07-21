@@ -33,7 +33,7 @@ public class SQLMessagePlugin
     [return: Description("Generates Postgre SELECT query based on provided user massage.")]
     public async Task<string> GenerateSqlAsync(KernelArguments arguments)
     {
-        var prompt = @"Generate PostgreSQL SELECT query based on provided user massage.
+        var prompt = @"Generate Postgre SQL query based on provided user massage.
             Use context below for query generation.
 
             Database name: ai_demo_products
@@ -67,31 +67,30 @@ public class SQLMessagePlugin
             );
 
             {{$history}}
+
             User: {{$message}}
+
             ChatBot:";
 
         var renderedPrompt = await _promptTemplateFactory.Create(new PromptTemplateConfig(prompt)).RenderAsync(_kernel, arguments);
 
-        var skFunction = _kernel.CreateFunctionFromPrompt(
+        var function = _kernel.CreateFunctionFromPrompt(
             promptTemplate: renderedPrompt,
             functionName: nameof(GenerateSqlAsync),
             description: "Complete the prompt.");
 
-        var resultAsString = string.Empty;
+        var result = string.Empty;
         try
         {
-            var result = await skFunction.InvokeAsync(_kernel, arguments);
-            resultAsString = result.GetValue<string>();
+            var invokeResult = await function.InvokeAsync(_kernel, arguments);
+            result = invokeResult.GetValue<string>();
         }
         catch(Exception exception)
         {
-            _logger?.LogError("ChatAsync", exception);
+            _logger?.LogError("GenerateSqlAsync", exception);
         }
 
-        string history = $"{arguments["history"]}";
-        history += $"\nUser: {arguments["message"]}\nSuggestions: {resultAsString}\n";
-
-        return history;
+        return result;
     }
 
 }

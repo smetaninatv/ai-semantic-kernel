@@ -21,8 +21,6 @@ public class AIChatBotService(AzureOpenAISettings _openAIConfig, OpenAIPromptSet
 
         // Create chat history
         var history = new ChatHistory();
-
-        history.AddSystemMessage(@"Use SQLMessagePlugin_generate_sql to generate sql. Return the only sql command.");
         history.AddUserMessage($"{userRequest.UserName}: {userRequest.Message}");
 
         var _chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
@@ -36,39 +34,29 @@ public class AIChatBotService(AzureOpenAISettings _openAIConfig, OpenAIPromptSet
             ToolCallBehavior = ToolCallBehavior.EnableKernelFunctions
         };
 
-        // Get the response from the AI
+        //Execute plugins
+
+        string? pluginResult = await ExecutePluginFunction(kernel, "SQLMessagePlugin", "generate_sql", history, userRequest.Message, openAIPromptExecutionSettings);
+        
+        history.AddSystemMessage(@$"Here is the sql query to get data from the database: {pluginResult}");
+
+        pluginResult = await ExecutePluginFunction(kernel, "SQLExecutionPlugin", "execute_sql", history, pluginResult, openAIPromptExecutionSettings);
+
+        history.AddSystemMessage(@$"Here is the information from the database for the prompt '{userRequest.Message}' in json format: {pluginResult}");
+
+        pluginResult = await ExecutePluginFunction(kernel, "ResultConverterPlugin", "convert_sql", history, pluginResult, openAIPromptExecutionSettings);
+
+        //history.AddSystemMessage(@$"Here is the text representation of json: {pluginResult}");
+
+        history.AddSystemMessage(@$"Use the json content and the data from it to answer the question. Make the response friendly and polite.");
+
         var result = await _chatCompletionService.GetChatMessageContentAsync(
             history,
             executionSettings: openAIPromptExecutionSettings,
             kernel: kernel
         );
-        
-        history.AddAssistantMessage(result?.Content ?? "");
-
-        var plugin = await kernel.Plugins.GetFunction("SQLMessagePlugin", "generate_sql").InvokeAsync(kernel);
-        string pluginResult = JsonSerializer.Serialize(plugin);
-        history.AddSystemMessage(@$"Use SQLMessagePlugin_generate_sql result: {pluginResult}");
-
-        history.AddSystemMessage(@"Use SQLExecutionPlugin_execute_sql to execute sql. Return json result.");
-
-        result = await _chatCompletionService.GetChatMessageContentAsync(
-            history,
-            executionSettings: openAIPromptExecutionSettings,
-            kernel: kernel
-        );
 
         history.AddAssistantMessage(result?.Content ?? "");
-
-        history.AddSystemMessage(@"Use ResultConverterPlugin_convert_sql to provide user friendly text from json.");
-
-        result = await _chatCompletionService.GetChatMessageContentAsync(
-            history,
-            executionSettings: openAIPromptExecutionSettings,
-            kernel: kernel
-        );
-
-        history.AddAssistantMessage(result?.Content ?? "");
-
 
         return new AIResponse
         {
@@ -89,5 +77,15 @@ public class AIChatBotService(AzureOpenAISettings _openAIConfig, OpenAIPromptSet
         builder.Plugins.AddFromObject(resultConverterPlugin);
 
         return builder.Build();
+    }
+
+    private async Task<string?> ExecutePluginFunction(Kernel kernel, string pluginName, string functionName, ChatHistory history, string message, OpenAIPromptExecutionSettings? executionSettings) 
+    {
+        KernelArguments arguments = new KernelArguments(executionSettings);
+        arguments.Add("history", history);
+        arguments.Add("message", message);
+
+        var plugin = await kernel.Plugins.GetFunction(pluginName, functionName).InvokeAsync(kernel, arguments);
+        return plugin.GetValue<string>();
     }
 }

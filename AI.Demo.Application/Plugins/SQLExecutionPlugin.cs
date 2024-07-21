@@ -17,9 +17,9 @@ public class SQLExecutionPlugin
     private readonly Kernel _kernel;
     private readonly ILogger<SQLExecutionPlugin>? _logger;
 
-    private readonly IProductRepository<Product> _product;
+    private readonly IProductRepository<object> _product;
 
-    public SQLExecutionPlugin(IConfiguration configuration, IProductRepository<Product> product, ILogger<SQLExecutionPlugin>? logger)
+    public SQLExecutionPlugin(IConfiguration configuration, IProductRepository<object> product, ILogger<SQLExecutionPlugin>? logger)
     {
         var openAIConfig = configuration?.GetSection(nameof(AzureOpenAISettings)).Get<AzureOpenAISettings>();
 
@@ -38,20 +38,18 @@ public class SQLExecutionPlugin
     {
         string? sqlCommand = arguments["message"]?.ToString();
 
-        var resultAsString = string.Empty;
+        var result = string.Empty;
         try
         {
-            List<Product>? products = await _product.GetListAsync(sqlCommand ?? "");
+            List<object>? products = await _product.GetListAsync(sqlCommand ?? "");
 
-            resultAsString = JsonConvert.SerializeObject(products);
+            result = JsonConvert.SerializeObject(products);
         }
         catch (Exception exception)
         {
-            _logger?.LogError("ChatAsync", exception);
+            _logger?.LogError("ExecuteSqlAsync", exception);
         }
 
-        string history = $"{arguments["history"]}";
-        history += $"\nUser: {arguments["message"]}\nSuggestions: {resultAsString}\n";
-        return history;
+        return result;
     }
 }
