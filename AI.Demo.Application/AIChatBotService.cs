@@ -34,20 +34,20 @@ public class AIChatBotService(AzureOpenAISettings _openAIConfig, OpenAIPromptSet
             ToolCallBehavior = ToolCallBehavior.EnableKernelFunctions
         };
 
-        //Execute plugins
+        // Execute plugins
 
+        // Generate SQL query
         string? pluginResult = await ExecutePluginFunction(kernel, "SQLMessagePlugin", "generate_sql", history, userRequest.Message, openAIPromptExecutionSettings);
-        
         history.AddSystemMessage(@$"Here is the sql query to get data from the database: {pluginResult}");
 
+        // Execute SQL query
         pluginResult = await ExecutePluginFunction(kernel, "SQLExecutionPlugin", "execute_sql", history, pluginResult, openAIPromptExecutionSettings);
-
         history.AddSystemMessage(@$"Here is the information from the database for the prompt '{userRequest.Message}' in json format: {pluginResult}");
 
-        pluginResult = await ExecutePluginFunction(kernel, "ResultConverterPlugin", "convert_sql", history, pluginResult, openAIPromptExecutionSettings);
-
+        //pluginResult = await ExecutePluginFunction(kernel, "ResultConverterPlugin", "convert_sql", history, pluginResult, openAIPromptExecutionSettings);
         //history.AddSystemMessage(@$"Here is the text representation of json: {pluginResult}");
 
+        // Convert json to the user firendly message
         history.AddSystemMessage(@$"Use the json content and the data from it to answer the question. Make the response friendly and polite.");
 
         var result = await _chatCompletionService.GetChatMessageContentAsync(
