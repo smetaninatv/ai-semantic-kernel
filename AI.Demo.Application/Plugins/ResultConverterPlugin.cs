@@ -26,16 +26,16 @@ public class ResultConverterPlugin
         _logger = logger;
     }
 
-    [KernelFunction("convert_sql")]
-    [Description("Converts SQL result to the user friendly message.")]
-    [return: Description("Converts SQL result to the user friendly message.")]
-    public async Task<string> ConverToUserFriendlyMessageAsync(KernelArguments arguments)
+    [KernelFunction("convert_json")]
+    [Description("Converts json result to the user friendly message.")]
+    [return: Description("Converts json result to the user friendly message.")]
+    public async Task<string> JsonToUserFriendlyMessageAsync(KernelArguments arguments)
     {
-        var prompt = @"The history of user request:
-            {{$history}}
+        var prompt = @"Analyze the JSON data from the plugin execution results and respond to the prompt.
 
-            Use provided json content and the data from it to answer the question.
             {{$message}}
+
+            Json data: {{$execution_result}}
 
             ChatBot:";
 
@@ -43,7 +43,7 @@ public class ResultConverterPlugin
 
         var function = _kernel.CreateFunctionFromPrompt(
             promptTemplate: renderedPrompt,
-            functionName: nameof(ConverToUserFriendlyMessageAsync),
+            functionName: nameof(JsonToUserFriendlyMessageAsync),
             description: "Complete the prompt.");
 
         var result = string.Empty;
@@ -54,7 +54,8 @@ public class ResultConverterPlugin
         }
         catch(Exception exception)
         {
-            _logger?.LogError("ConverToUserFriendlyMessageAsync", exception);
+            _logger?.LogError("JsonToUserFriendlyMessageAsync", exception);
+            return "I can't analyze the data we have.";
         }
 
         return result;

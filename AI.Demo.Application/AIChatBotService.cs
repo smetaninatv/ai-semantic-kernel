@@ -8,9 +8,13 @@ using Microsoft.Extensions.Logging;
 using AI.Demo.Infrastructure.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
+using Microsoft.SemanticKernel.PromptTemplates.Handlebars;
+using System.Threading.Tasks;
+using Microsoft.SemanticKernel.Planning.Handlebars;
 
 namespace AI.Demo.Application;
 
+#pragma warning disable SKEXP0060
 public class AIChatBotService(AzureOpenAISettings _openAIConfig, OpenAIPromptSettings _promptConfig, 
     SQLMessagePlugin sqlMessagePlugin, SQLExecutionPlugin sqlExecutionPlugin, ResultConverterPlugin resultConverterPlugin, ILogger<AIChatBotService> _logger) : IAIChatBotService
 {
@@ -18,12 +22,6 @@ public class AIChatBotService(AzureOpenAISettings _openAIConfig, OpenAIPromptSet
     {
         // Init Semantic Kernel
         var kernel = InitKernel();
-
-        // Create chat history
-        var history = new ChatHistory();
-        history.AddUserMessage($"{userRequest.UserName}: {userRequest.Message}");
-
-        var _chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
 
         // Enable plugins
         OpenAIPromptExecutionSettings openAIPromptExecutionSettings = new()
@@ -35,34 +33,29 @@ public class AIChatBotService(AzureOpenAISettings _openAIConfig, OpenAIPromptSet
         };
 
         // Execute plugins
+        var planner = new HandlebarsPlanner(new HandlebarsPlannerOptions()
+        {
+            ExecutionSettings = openAIPromptExecutionSettings,
+        });
 
-        // Generate SQL query
-        string? pluginResult = await ExecutePluginFunction(kernel, "SQLMessagePlugin", "generate_sql", history, userRequest.Message, openAIPromptExecutionSettings);
-        history.AddSystemMessage(@$"Here is the sql query to get data from the database: {pluginResult}");
+        var ask = @$"Use the SQLMessagePlugin, SQLExecutionPlugin, and ResultConverterPlugin to get an answer from our database.
+                    Analyze the JSON data from the plugin execution results and respond to the prompt.";
+        
+        var arguments = new KernelArguments()
+        {
+            { "message", $"{userRequest.UserName}: {userRequest.Message}" },
+            { "execution_result", "" },
+        };
 
-        // Execute SQL query
-        pluginResult = await ExecutePluginFunction(kernel, "SQLExecutionPlugin", "execute_sql", history, pluginResult, openAIPromptExecutionSettings);
-        history.AddSystemMessage(@$"Here is the information from the database for the prompt '{userRequest.Message}' in json format: {pluginResult}");
-
-        //pluginResult = await ExecutePluginFunction(kernel, "ResultConverterPlugin", "convert_sql", history, pluginResult, openAIPromptExecutionSettings);
-        //history.AddSystemMessage(@$"Here is the text representation of json: {pluginResult}");
-
-        // Convert json to the user firendly message
-        history.AddSystemMessage(@$"Use the json content and the data from it to answer the question. Make the response friendly and polite.");
-
-        var result = await _chatCompletionService.GetChatMessageContentAsync(
-            history,
-            executionSettings: openAIPromptExecutionSettings,
-            kernel: kernel
-        );
-
-        history.AddAssistantMessage(result?.Content ?? "");
+        var plan = await planner.CreatePlanAsync(kernel, ask, arguments);
+        
+        var result = await plan.InvokeAsync(kernel, arguments);
 
         return new AIResponse
         {
             Date = DateTime.Now,
             UserRequest = userRequest,
-            Message = result?.Content ?? ""
+            Message = result ?? ""
         };
     }
 
@@ -77,15 +70,5 @@ public class AIChatBotService(AzureOpenAISettings _openAIConfig, OpenAIPromptSet
         builder.Plugins.AddFromObject(resultConverterPlugin);
 
         return builder.Build();
-    }
-
-    private async Task<string?> ExecutePluginFunction(Kernel kernel, string pluginName, string functionName, ChatHistory history, string message, OpenAIPromptExecutionSettings? executionSettings) 
-    {
-        KernelArguments arguments = new KernelArguments(executionSettings);
-        arguments.Add("history", history);
-        arguments.Add("message", message);
-
-        var plugin = await kernel.Plugins.GetFunction(pluginName, functionName).InvokeAsync(kernel, arguments);
-        return plugin.GetValue<string>();
     }
 }

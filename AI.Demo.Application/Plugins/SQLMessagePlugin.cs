@@ -35,6 +35,7 @@ public class SQLMessagePlugin
     {
         var prompt = @"Generate Postgre SQL query based on provided user massage.
             Use context below for query generation.
+            Return the only SQL query, without additional words or details.
 
             Database name: ai_demo_products
 
@@ -66,9 +67,7 @@ public class SQLMessagePlugin
                 CONSTRAINT categories_pkey PRIMARY KEY (id)
             );
 
-            {{$history}}
-
-            User: {{$message}}
+            {{$message}}
 
             ChatBot:";
 
@@ -84,10 +83,13 @@ public class SQLMessagePlugin
         {
             var invokeResult = await function.InvokeAsync(_kernel, arguments);
             result = invokeResult.GetValue<string>();
+
+            arguments["execution_result"] = result;
         }
         catch(Exception exception)
         {
             _logger?.LogError("GenerateSqlAsync", exception);
+            return $"Could not generate SQL request. Error: {exception.Message}";
         }
 
         return result;

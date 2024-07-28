@@ -14,19 +14,12 @@ namespace AI.Demo.Application;
 
 public class SQLExecutionPlugin
 {
-    private readonly Kernel _kernel;
     private readonly ILogger<SQLExecutionPlugin>? _logger;
 
     private readonly IProductRepository<object> _product;
 
     public SQLExecutionPlugin(IConfiguration configuration, IProductRepository<object> product, ILogger<SQLExecutionPlugin>? logger)
     {
-        var openAIConfig = configuration?.GetSection(nameof(AzureOpenAISettings)).Get<AzureOpenAISettings>();
-
-        _kernel = Kernel.CreateBuilder()
-            .AddAzureOpenAIChatCompletion(openAIConfig!.Deployment, openAIConfig.Endpoint, openAIConfig.ApiKey)
-            .Build();
-
         _product = product;
         _logger = logger;
     }
@@ -36,7 +29,7 @@ public class SQLExecutionPlugin
     [return: Description("Executes SELECT query on  PostgreSQL. Provides result as json.")]
     public async Task<string> ExecuteSqlAsync(KernelArguments arguments)
     {
-        string? sqlCommand = arguments["message"]?.ToString();
+        string? sqlCommand = arguments["execution_result"]?.ToString();
 
         var result = string.Empty;
         try
@@ -44,10 +37,13 @@ public class SQLExecutionPlugin
             List<object>? products = await _product.GetListAsync(sqlCommand ?? "");
 
             result = JsonConvert.SerializeObject(products);
+
+            arguments["execution_result"] = result;
         }
         catch (Exception exception)
         {
             _logger?.LogError("ExecuteSqlAsync", exception);
+            return $"Could not execute given SQL request in PostgreSQL database. Please, try again. Error: {exception.Message}";
         }
 
         return result;
